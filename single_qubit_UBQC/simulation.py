@@ -3,7 +3,14 @@
 """
 Created on Tue Apr 16 12:29:40 2019
 
-@author: georg
+@author: BlindQlouder
+
+This simulator works as follows:
+There is a server and a client. 
+The server keeps the full representation of the state using qutip. For this purpose, he has the hiding paramenters from the client, which would be hidden in a real implementation. 
+Server and Client both run in a different process but communicate using Pipe.
+
+The goal of the protocol is to have a qubit roated to an arbitrary position. 
 """
 
 import qutip as qt, random, time, numpy as np
@@ -14,30 +21,29 @@ from multiprocessing import Process, Pipe
 
 class Server():
     def __init__(self, conn):
-        self.cesium = qt.Qobj([[1],[0]])
-        self.strontium = qt.Qobj([[1],[0]])
-        self.system = qt.tensor(self.cesium,self.strontium)
+        self.qubit1 = qt.Qobj([[1],[0]])
+        self.qubit2 = qt.Qobj([[1],[0]])
+        self.system = qt.tensor(self.qubit1,self.qubit2)
         self.conn = conn
-        print("server created")
 
-    def RS(self):
+    def RS(self):   # remote state preparation
         print("S: applying RS")
-        theta = self.conn.recv()
-        self.strontium = qt.rz(theta)*(qt.snot()*qt.Qobj([[1],[0]]))
-        self.system = qt.tensor(self.cesium,self.strontium)
-        print(self.system)
+        theta = self.conn.recv()    # this is the hiding angle of the client. Normally, the client would keep it for himself.
+        self.qubit2 = qt.rz(theta)*(qt.snot()*qt.Qobj([[1],[0]]))
+        self.system = qt.tensor(self.qubit1,self.qubit2)
+        #print(self.system)
         return 1
 
     def SWAP(self):
         print("S: applying SWAP")
         self.system = qt.swap()*self.system
-        print(self.system)
+        #print(self.system)
         return 1
 
     def CPHASE(self):
         print("S: applying CPHASE")
         self.system = qt.cphase(pi)*self.system
-        print(self.system)
+        #print(self.system)
         return 1
 
     def get_angle(self):
@@ -46,9 +52,8 @@ class Server():
 
     def U_client(self, delta):
         print("S: applying U_client")
-        #delta = self.conn.recv()
-        self.system = qt.tensor(qt.qeye(2), qt.snot()*qt.rz(-delta)) * self.system            # rotation around Z followed by Hadamard on the strontium qubit
-        print(self.system)
+        self.system = qt.tensor(qt.qeye(2), qt.snot()*qt.rz(-delta)) * self.system            # rotation around Z followed by Hadamard on the second qubit
+        #print(self.system)
         return 1
 
     def M(self):
@@ -57,13 +62,13 @@ class Server():
         p = np.abs(psi)**2
         if random.random()<=(p[0] + p[2]):
             m = 0
-            C = qt.Qobj([[psi[0]], [psi[2]]])
+            q1 = qt.Qobj([[psi[0]], [psi[2]]])
         else:
             m = 1
-            C = qt.Qobj([[psi[1]], [psi[3]]])
-        C = C/C.norm()
-        self.cesium = C
-        print("M: cesium",self.cesium)
+            q1 = qt.Qobj([[psi[1]], [psi[3]]])
+        q1 = q1/q1.norm()
+        self.qubit1 = q1
+        print("M: qubit1:", self.qubit1)
         #self.conn.send(m)
         return m
         
@@ -127,8 +132,7 @@ if __name__ == "__main__":
         #m = server.U_client(delta)
         #server.send_measurement(m)
         print("----------")
-        print("S: final state")
-        print("cesium",server.cesium)
+        print("S: final state:\n", server.qubit1.full())
         print("----------")
 
 
@@ -142,8 +146,8 @@ if __name__ == "__main__":
         alpha = pi/4
         beta = pi/2
         gamma = -pi/2
-        #angle = [alpha, beta, gamma, 0]
-        angle = [0, 0, 0, 0]
+        angle = [gamma, beta, alpha, 0]
+        angle = [0, beta, 0, 0]
         theta = np.random.randint(0, 8, 5)*pi/8
         #theta = [0, 0, 0, 0, 0]
         theta[4] = 0
@@ -170,11 +174,16 @@ if __name__ == "__main__":
                 delta = compute_delta(angle[i], theta[i], m, r1, r2, r3, s1, s2)
 
         #choose a last measurement (tomography ?) on qubit 5 supposed to be in the state X**(s_4+r_4).Z**(s_3+r_3).R_Z(theta_5)R_Z(alpha)R_X(beta)R_Z(gamma)|psi_in> ? 
-        print("----------")
+        #print("----------")
+        time.sleep(0.01)
         print("C: final state info: \nprep_state correction m = {}, hidden angle : theta_5 =  {:.4f}, dependancies : s4 = {} s3 = {},  hidden signaling : r4 = {} r3 = {}".format(m,theta[4],s2,s1,r[3],r[2]))
-        print("|psi_out> = X**(s_4+r_4).Z**(m+s_3+r_3).R_Z(theta_5)R_Z(alpha)R_X(beta)R_Z(gamma)|psi_in>")
+        print("|psi_out> = X**(s_4+r_4) Z**(m+s_3+r_3) R_Z(theta_5) R_Z(alpha) R_X(beta) R_Z(gamma) |psi_in>")
         print("|psi_in> = |+>, m+s_3+r_3 = {}".format((m+s1+r[2])%2))
-        print("----------")
+        #print("----------")
+        expected_state = qt.rx(pi*(s2+r[3])) * qt.rz(pi*(m+s1+r[2])) * qt.rz(theta[4]) * qt.rz(angle[2]) * qt.rx(angle[1]) * qt.rz(angle[0]) * 1./np.sqrt(2)*qt.Qobj([[1],[1]])
+        psi = expected_state.full()
+        print("state should be:\n", psi)
+
 
     p1 = Process(target=server_protocol, args=(S,))
     p2 = Process(target=client_protocol, args=(C,))
