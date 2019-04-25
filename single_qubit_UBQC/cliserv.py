@@ -10,7 +10,7 @@ The core engine for simulating the client and the server
 import qutip as qt, random, time, numpy as np
 from numpy import pi
 
-
+from multiprocessing import Process, Pipe
 
 class Server():
     def __init__(self, conn):
@@ -84,3 +84,16 @@ class Client():
     def get_measurement(self):
         m = self.conn.recv()
         return m
+
+def StartSimulation(server_process, client_process):
+    parent_conn, child_conn = Pipe()
+    S = Server(parent_conn)
+    C = Client(child_conn)
+
+    p1 = Process(target=server_process, args=(S,))
+    p2 = Process(target=client_process, args=(C,))
+
+    p1.start()
+    p2.start()
+    p1.join()
+    p2.join()
