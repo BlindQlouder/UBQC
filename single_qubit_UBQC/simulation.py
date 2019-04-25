@@ -17,11 +17,9 @@ Client and Server have standard functions that can be used in the separately def
 The goal of the protocol below is to peform an arbitrary single-qubit computation by interpreting the two qubits as a one-dimensional, continuously rebuilding cluster state.
 """
 
-from cliserv import Server,Client
+from cliserv import StartSimulation
 import qutip as qt, numpy as np
 from numpy import pi
-
-from multiprocessing import Process, Pipe
 
 
 def server_protocol(server):
@@ -90,14 +88,4 @@ def client_protocol(client):
 
 if __name__ == "__main__":
 
-    parent_conn, child_conn = Pipe()
-    S = Server(parent_conn)
-    C = Client(child_conn)
-
-
-
-    p1 = Process(target=server_protocol, args=(S,))
-    p2 = Process(target=client_protocol, args=(C,))
-
-    p1.start()
-    p2.start()
+    StartSimulation(server_protocol, client_protocol)
