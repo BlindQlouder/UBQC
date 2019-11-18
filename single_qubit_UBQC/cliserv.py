@@ -100,4 +100,9 @@ def StartSimulation(server_process, client_process):
     p1.join()
     p2.join()
 
-    return queue.get()
+    
+
+
+    states = queue.get()
+
+    return states
