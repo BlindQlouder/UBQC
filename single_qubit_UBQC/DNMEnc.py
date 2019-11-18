@@ -17,6 +17,7 @@ The resulting state is a random state, sampled from a 2-design.
 from cliserv import StartSimulation
 import qutip as qt, numpy as np
 from numpy import pi
+import matplotlib.pylab as plt
 
 N=6 #The length of the linear cluster
 
@@ -26,7 +27,7 @@ def server_protocol(server):
     server.SWAP()
     m = server.M()
 
-    for i in range(1,N-1):
+    for i in range(1,N):
         # The server receives the measurement angle for that round from the client
         delta = server.get_angle()
         # The server gets the state through RSP, swaps and entangles it
@@ -40,6 +41,8 @@ def server_protocol(server):
         server.send_measurement(m)
 
     print("S: final state:\n", server.qubit1.full())
+    #print("S: final state:\n", np.abs(server.qubit1.full().flatten())**2)
+    server.queue.put(server.qubit1)
 
 def client_protocol(client):
 
@@ -52,40 +55,38 @@ def client_protocol(client):
         r1, r2, r3: the classical hiding for qubits i-2, i-1, and i
         s: the measurement's outcomes for qubits i-1
         """
-        return ((-1)**(s2+r2)*phi + theta + (r1+r3)*pi)%(2*pi)
-
-    N=6 #The length of the linear cluster
+        return ((-1)**(s+r2)*phi + theta + (r1+r3)*pi)%(2*pi)
 
     # The angles for the qubits in the server's cluster state, prepared through RSP
     # chosen in {pi/4, 3pi/4, 5pi/4, 7pi/4}
-    phi = (2*np.random.randint(0, 3, N-1)+1)*pi/2
+    phi = (2*np.random.randint(0, 3, N)+1)*pi/4
+    #phi = np.ones(N) * pi/4
     #phi[3] = 0    # this will just do a Hadamard at the end #We should do it explicitely if required and not via a trick
 
     # The hiding angles chosen by the client and sent to the server
     # chosen from {0, pi/2, pi, 3pi/2}
-    theta = np.random.randint(0, 3, N-1)*pi/4
+    theta = np.random.randint(0, 3, N)*pi/2
 
     # Randomness for hiding the measurement's outcomes
     r = np.random.randint(0, 2, N-1)
 
     #First round:
-    s1 = 0
-    s2 = 0
+    s = 0
     r1 = 0
     r2 = 0
     r3 = r[0]
     m = client.RS(theta[0])
     # The description of the state is updated based on the result of the measurement
-    phi[0] = (-1)**m)*phi[0]
-    delta = compute_delta(phi[0], theta[0], 0, 0, r[0], 0, s2)
+    phi[0] = (-1)**m*phi[0]
+    delta = compute_delta(phi[0], theta[0], 0, 0, r[0], s)
 
-    for i in range(1,N-1):
+    for i in range(1,N):
         client.send_angle(delta)
         m = client.RS(theta[i])
         # The description of the state is updated based on the result of the measurement
-        phi[i] = (-1)**m)*phi[0]
+        phi[i] = (-1)**m*phi[i]
         s = client.get_measurement()
-        if i < 4:
+        if i < N-1:
             r1 = r2
             r2 = r3
             r3 = r[i]
@@ -109,4 +110,31 @@ def client_protocol(client):
 
 if __name__ == "__main__":
 
-    StartSimulation(server_protocol, client_protocol)
+    final_states = []
+    for i in range(1):
+        final_states.append(StartSimulation(server_protocol, client_protocol))
+
+    #final_state = np.array(final_state)
+
+    #a = np.histogram(final_state[:,0].real, bins=10, range=(-1,1))
+    #b = np.histogram(final_state[:,0].imag, bins=10, range=(-1,1))
+    #c = np.histogram(final_state[:,0].real, bins=10, range=(-1,1))
+    #d = np.histogram(final_state[:,0].imag, bins=10, range=(-1,1))
+    #plt.figure()
+    #plt.bar([1,2,3,4], [a,b,c,d])
+    #plt.show()
+
+    b = qt.Bloch()
+    b.add_states(final_states)
+    b.show()
+
+
+
+
+
+
+
+
+
+
+

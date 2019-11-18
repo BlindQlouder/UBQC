@@ -10,14 +10,15 @@ The core engine for simulating the client and the server
 import qutip as qt, random, time, numpy as np
 from numpy import pi
 
-from multiprocessing import Process, Pipe
+from multiprocessing import Process, Pipe, Queue
 
 class Server():
-    def __init__(self, conn):
+    def __init__(self, conn, queue):
         self.qubit1 = qt.Qobj([[1],[0]])    # the computational qubit
         self.qubit2 = qt.Qobj([[1],[0]])    # the qubit the client can prepare remotely; measurements are done exclusively on this qubit
         self.system = qt.tensor(self.qubit1,self.qubit2)
         self.conn = conn
+        self.queue = queue
 
     def RS(self):   # remote state preparation
         print("S: applying RS")
@@ -87,7 +88,8 @@ class Client():
 
 def StartSimulation(server_process, client_process):
     parent_conn, child_conn = Pipe()
-    S = Server(parent_conn)
+    queue = Queue()
+    S = Server(parent_conn, queue)
     C = Client(child_conn)
 
     p1 = Process(target=server_process, args=(S,))
@@ -97,3 +99,5 @@ def StartSimulation(server_process, client_process):
     p2.start()
     p1.join()
     p2.join()
+
+    return queue.get()
